@@ -1,0 +1,49 @@
+---
+title: "Componentes Principales y Análisis Factorial"
+author: "William Chavarria"
+date: "August 23, 2017"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Descripción de los Datos Analizados
+
+El Tiempo Promedio de Reparación (Mean Time to Repair)  para fallas en la red de fibra óptica en cada departamento del pais, como variable dependiente.  Las variables predictoras cuantifican la cantidad de fallas que se generan, el impacto y la cantidad de recursos humanos y materiales necesarios para la reparación.
+\
+
+```{r cargar_paquetes, include=FALSE}
+# paquetes a utilizar
+  pkgs  <- c('dplyr',
+             'data.table')
+  
+  # cargar librarias
+  sapply(pkgs, require,
+         character.only = TRUE,
+         quietly = TRUE,
+         warn.conflicts = FALSE)
+```
+
+```{r leer_dataset}
+ds <- fread(input = 'fallas.csv', data.table = FALSE)
+```
+
+## Aplicar ACP
+
+```{r pca}
+acp1 <- princomp(ds[, -c(1:2)], cor = TRUE)
+```
+
+### Reportar los resultados del análisis
+
+```{r resultados}
+summary(acp1)
+```
+
+### Graficar
+```{r graficar}
+plot(acp1, type = 'l')
+```
+
