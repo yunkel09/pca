@@ -2,22 +2,34 @@
 title: "Componentes Principales y Análisis Factorial"
 author: "William Chavarria"
 date: "August 23, 2017"
-output: pdf_document
+geometry: "left=1.27cm,right=1.27cm,top=1cm,bottom=1cm"
+output: 
+  pdf_document:
+    highlight: haddock
+    number_sections: false
 ---
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
+# Análisis de Componentes Principales
+
 ## Descripción de los Datos Analizados
 
-El Tiempo Promedio de Reparación (Mean Time to Repair)  para fallas en la red de fibra óptica en cada departamento del pais, como variable dependiente.  Las variables predictoras cuantifican la cantidad de fallas que se generan, el impacto y la cantidad de recursos humanos y materiales necesarios para la reparación.
+Se dispone de una muestra de 22 departamentos de Guatemala en las que se midieron diferentes variables relacionadas con las fallas en la red de fibra óptica.
+
+Como variable dependiente tenemos el MTTR (Mean Time to Repair) y como variables predictoras variables relativas a la cantidad de fallas, impacto y cantidad de recursos humanos y materiales necesarios para la reparación.
 \
 
 ```{r cargar_paquetes, include=FALSE}
 # paquetes a utilizar
   pkgs  <- c('dplyr',
-             'data.table')
+             'data.table',
+             'xtable',
+             'pander',
+             'knitr',
+             'ade4')
   
   # cargar librarias
   sapply(pkgs, require,
@@ -26,24 +38,175 @@ El Tiempo Promedio de Reparación (Mean Time to Repair)  para fallas en la red d
          warn.conflicts = FALSE)
 ```
 
+## Lectura de los datos
+
 ```{r leer_dataset}
 ds <- fread(input = 'fallas.csv', data.table = FALSE)
 ```
 
+## Estructura
+
+```{r ver_datos}
+str(ds, vec.len = 2)
+```
+
+## Normalizar los datos
+
+```{r normalizar}
+# crear una copia del dataset
+ds.s <- ds
+
+# normalizar solo las columnas numéricas
+ds.s[, -1] <- lapply(ds.s[, -1], scale)
+```
+
+
+
+## Evaluar si es apropiado realizar el análisis
+
+
+```{r diagrama_corr, eval=FALSE, include=TRUE}
+cor(ds.s[, -1])
+```
+
+Por efectos prácticos no incluimos el diagrama ni la matriz de correlación, sin embargo se observa que las variables predictores se encuentran fuertemente correlacionadas.  Multicolinealidad.
+
 ## Aplicar ACP
 
 ```{r pca}
-acp1 <- princomp(ds[, -c(1:2)], cor = TRUE)
+pca.1 <- princomp(scale(ds[, -c(1:2)]), cor = TRUE)
 ```
 
 ### Reportar los resultados del análisis
 
 ```{r resultados}
-summary(acp1)
+summary(pca.1)
+```
+\vspace{12pt}
+**Interpretación** 
+
+Observamos que las dos primeras componentes agrupan el 98.2% de la variación.  Solo la primera componente tiene una desviación estandar de 3.2, indicando que contiene información de más de tres variables.
+
+
+\pagebreak
+
+## Autovectores
+
+```{r loadings}
+loadings(pca.1)
+```
+\vspace{14pt}
+**Interpretación**
+
+En esta matriz podemos observar los autovectores o coeficientes de la ecuación de cada componente.  Todas las variables con excepción de 'celdas afectadas' se encuentran explicadas en el componente principal 1.  Debido a que lo que se está haciendo es una transformación ortogonal a la matriz de correlación, lo signos no son relevantes.  Solo nos interesa la magnitud.
+
+
+\pagebreak
+
+
+
+## Gráfico de Sedimentación
+
+```{r graficar, fig.align='center'}
+plot(pca.1, type = 'l')
 ```
 
-### Graficar
-```{r graficar}
-plot(acp1, type = 'l')
+
+**Interpretación**
+
+Seleccionamos unicamente los componentes principales 1 y 2
+
+## Autovalores
+
+```{r scores, tidy=TRUE}
+pca.1$scores
 ```
+\
+**Análisis**
+
+Estos son los datos que debemos incorporar a la matriz original
+
+
+
+## Seleccionar componentes principales
+
+```{r seleccionar}
+cp1       <- pca.1$loadings[, 1]
+cp2       <- pca.1$loadings[, 2]
+comp_prin <- cbind(cp1, cp2)
+
+```
+
+## Circulo de correlación para el CP1 y CP2
+
+```{r correlaciones, fig.align='center'}
+s.corcircle(dfxy = comp_prin, sub = 'CP1 y CP2', possub = 'topright')
+```
+
+**Interpretación**
+
+Podemos ver en este gráfico que el primer componente principal explica muy bien todas las variables con la excepción de 'celdas_afectadas'.  La componente 2 explica mejor la parte de 'celdas afectadas'.
+\
+## Coordenadas
+
+```{r autovalores, fig.align='center'}
+s.label(pca.1$scores, label = ds$nombre, sub = 'Coordenadas de los departamentos')
+```
+
+**Conclusón**
+
+Vemos que el departamento que se encuentra en la parte más negativa del eje 'Y' es el que presenta más cantidad de afectaciones y uso de recursos humanos y materiales.  Se podría decir que los departamentos de Suchi y Quezaltenango están mas en línea con el CP2.
+
+
+## Elaborar modelo de regresión lineal
+
+
+### Elaborar el modelo con todas las variables X
+
+```{r regresion_normal}
+# crear el modelo de regresión con los datos estandarizados
+m1 <- lm(formula = mttr ~ ., data = ds.s[, -1])
+```
+
+```{r verificar_m1}
+summary(m1)
+```
+**Interpretación**
+
+Observamos que solo el predictor mufa tiene una significancia del 99.9%
+
+
+
+### Elaboramos el modelo considerando solo los primeros dos componentes principales
+
+```{r regresion_con_cps}
+# Copiar los scores al df estandarizado
+cps <- matrix(pca.1$scores[1:(length(ds$nombre) * 2)], nrow = 22, ncol = 2)
+
+# renombrar columnas de la matrix
+colnames(cps) <- c('CP1', 'CP2')
+
+
+# copiar al df original estandarizado
+ds.s1 <- cbind(ds.s, cps)
+
+# ejecutar la regresión
+m2 <- lm(mttr ~ CP1 + CP2, data = ds.s1[, -1])
+```
+
+
+```{r summary_cps}
+summary(m2)
+```
+
+
+# Análisis Factorial
+
+
+
+
+
+
+
+
 
